@@ -75,22 +75,29 @@
       });
     }
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     function startRecording(cardElement, index, maxItems) {
       if(!SpeechRecognition) return alert("非対応ブラウザです");
       const recognition = new SpeechRecognition();
       recognition.lang = 'ja-JP';
+      recognition.continuous = true; // 💡追加: 途中で黙ってもマイクを切らずに継続する
+      
       const statusText = document.getElementById(`status-${index}`);
       cardElement.classList.add('recording');
       statusText.innerText = `🔴 聞き取り中... (${maxItems}個の数字をどうぞ)`;
       recognition.start();
 
       recognition.onresult = (event) => {
-        const speechResult = event.results[0][0].transcript;
+        // 💡追加: 複数回に分けてゆっくり話した言葉をすべて繋ぎ合わせる
+        let speechResult = "";
+        for (let i = 0; i < event.results.length; i++) {
+          speechResult += event.results[i][0].transcript;
+        }
+
         const numbers = speechResult.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).match(/\d+/g);
 
         if (numbers && numbers.length > 0) {
-          statusText.innerText = `✅ ${numbers.length}個の数字を認識しました`;
+          statusText.innerHTML = `🗣️ 音声:「${speechResult}」<br>✅ ${numbers.length}個の数字を抽出`;
           numbers.slice(0, maxItems).forEach((num, i) => {
             const display = document.getElementById(`p-${index}-${i}`);
             if(display) { 
@@ -99,14 +106,17 @@
               currentInputData[index].prices[i] = num;
             }
           });
+
+          // 💡追加: 枠の数（3個など）と同じ数の数字を認識した瞬間に自動でマイクを終了
+          if (numbers.length >= maxItems) {
+            recognition.stop();
+          }
         } else {
-          statusText.innerText = `❌ 数字を認識できませんでした`;
+          statusText.innerHTML = `🗣️ 音声:「${speechResult}」<br>❌ 数字を認識できませんでした`;
         }
       };
       recognition.onend = () => cardElement.classList.remove('recording');
-    }
-
-    function sendData() {
+    }    function sendData() {
       const dataToSend = currentInputData.filter(d => d.prices.some(p => p !== ""));
       if (dataToSend.length === 0) return alert("入力された価格データがありません。");
 
