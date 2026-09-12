@@ -28,7 +28,7 @@
   <button class="send-btn" id="sendBtn" onclick="sendData()">📤 データを送信する</button>
 
   <script>
-    // ⚠️ ここにご自身のGASデプロイURLを貼り付けてください
+    // ご自身のGASデプロイURL
     const GAS_URL = "https://script.google.com/macros/s/AKfycbwwundmAFEkcMR_KTtimsfgMolJVAjgYJhu44C08HJRB2cHNa9vw2K39eW_pLXcjkKeuQ/exec"; 
 
     let allData = [];
@@ -75,12 +75,12 @@
       });
     }
 
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     function startRecording(cardElement, index, maxItems) {
       if(!SpeechRecognition) return alert("非対応ブラウザです");
       const recognition = new SpeechRecognition();
       recognition.lang = 'ja-JP';
-      recognition.continuous = true; // 💡追加: 途中で黙ってもマイクを切らずに継続する
+      recognition.continuous = true; 
       
       const statusText = document.getElementById(`status-${index}`);
       cardElement.classList.add('recording');
@@ -88,7 +88,6 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
       recognition.start();
 
       recognition.onresult = (event) => {
-        // 💡追加: 複数回に分けてゆっくり話した言葉をすべて繋ぎ合わせる
         let speechResult = "";
         for (let i = 0; i < event.results.length; i++) {
           speechResult += event.results[i][0].transcript;
@@ -107,7 +106,6 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
             }
           });
 
-          // 💡追加: 枠の数（3個など）と同じ数の数字を認識した瞬間に自動でマイクを終了
           if (numbers.length >= maxItems) {
             recognition.stop();
           }
@@ -116,7 +114,9 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
         }
       };
       recognition.onend = () => cardElement.classList.remove('recording');
-    }    function sendData() {
+    }
+
+    function sendData() {
       const dataToSend = currentInputData.filter(d => d.prices.some(p => p !== ""));
       if (dataToSend.length === 0) return alert("入力された価格データがありません。");
 
