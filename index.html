@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>価格調査アプリ</title>
+  <style>
+    body { font-family: sans-serif; background: #f0f4f8; margin: 0; padding: 10px; padding-bottom: 80px; }
+    .header { margin-bottom: 15px; }
+    select { width: 100%; padding: 12px; font-size: 1.1rem; border-radius: 8px; border: 1px solid #ccc; }
+    .station-card { background: white; padding: 15px; margin-bottom: 10px; border-radius: 12px; border-left: 5px solid #2196F3; cursor: pointer; }
+    .station-info h3 { margin: 0 0 10px 0; font-size: 1.2rem; }
+    .price-grid { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.8rem; text-align: center; }
+    .price-box { background: #f5f5f5; padding: 8px; border-radius: 6px; min-width: 50px; flex: 1; }
+    .price-box div { font-size: 1.1rem; font-weight: bold; margin-top: 5px; color: #333; }
+    .recording { border-left-color: #f44336; background: #ffebee; }
+    .status { font-size: 0.9rem; color: #666; margin-bottom: 10px; }
+    .send-btn { position: fixed; bottom: 15px; left: 15px; right: 15px; background: #4CAF50; color: white; border: none; padding: 15px; font-size: 1.2rem; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <select id="area-select" onchange="filterArea()">
+      <option value="">⏳ 読み込み中...</option>
+    </select>
+  </div>
+  <div id="station-list"></div>
+  <button class="send-btn" id="sendBtn" onclick="sendData()">📤 データを送信する</button>
+
+  <script>
+    // ⚠️ ここにご自身のGASデプロイURLを貼り付けてください
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwwundmAFEkcMR_KTtimsfgMolJVAjgYJhu44C08HJRB2cHNa9vw2K39eW_pLXcjkKeuQ/exec"; 
+
+    let allData = [];
+    let currentInputData = [];
+
+    fetch(GAS_URL)
+      .then(response => response.json())
+      .then(data => initUI(data))
+      .catch(error => alert("通信エラー: " + error));
+
+    function initUI(data) {
+      allData = data;
+      const select = document.getElementById('area-select');
+      select.innerHTML = '<option value="all">🌍 すべての地区</option>';
+      const areas = [...new Set(data.map(d => d.area))];
+      areas.forEach(area => { select.innerHTML += `<option value="${area}">${area}</option>`; });
+      filterArea();
+    }
+
+    function filterArea() {
+      const selectedArea = document.getElementById('area-select').value;
+      const listContainer = document.getElementById('station-list');
+      listContainer.innerHTML = '';
+      const filteredData = selectedArea === 'all' ? allData : allData.filter(d => d.area === selectedArea);
+      
+      currentInputData = filteredData.map(d => ({ area: d.area, name: d.name, prices: new Array(d.items.length).fill("") }));
+
+      filteredData.forEach((station, index) => {
+        const card = document.createElement('div');
+        card.className = 'station-card';
+        let gridHTML = '';
+        station.items.forEach((item, i) => {
+          gridHTML += `<div class="price-box">${item}<div id="p-${index}-${i}">-</div></div>`;
+        });
+        card.innerHTML = `
+          <div class="station-info">
+            <h3>${station.name}</h3>
+            <div class="status" id="status-${index}">🎤 タップして ${station.items.length} 個の数字を話す</div>
+          </div>
+          <div class="price-grid">${gridHTML}</div>
+        `;
+        card.onclick = () => startRecording(card, index, station.items.length);
+        listContainer.appendChild(card);
+      });
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    function startRecording(cardElement, index, maxItems) {
+      if(!SpeechRecognition) return alert("非対応ブラウザです");
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'ja-JP';
+      const statusText = document.getElementById(`status-${index}`);
+      cardElement.classList.add('recording');
+      statusText.innerText = `🔴 聞き取り中... (${maxItems}個の数字をどうぞ)`;
+      recognition.start();
+
+      recognition.onresult = (event) => {
+        const speechResult = event.results[0][0].transcript;
+        const numbers = speechResult.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).match(/\d+/g);
+
+        if (numbers && numbers.length > 0) {
+          statusText.innerText = `✅ ${numbers.length}個の数字を認識しました`;
+          numbers.slice(0, maxItems).forEach((num, i) => {
+            const display = document.getElementById(`p-${index}-${i}`);
+            if(display) { 
+              display.innerText = num; 
+              display.style.color = '#e91e63'; 
+              currentInputData[index].prices[i] = num;
+            }
+          });
+        } else {
+          statusText.innerText = `❌ 数字を認識できませんでした`;
+        }
+      };
+      recognition.onend = () => cardElement.classList.remove('recording');
+    }
+
+    function sendData() {
+      const dataToSend = currentInputData.filter(d => d.prices.some(p => p !== ""));
+      if (dataToSend.length === 0) return alert("入力された価格データがありません。");
+
+      const btn = document.getElementById('sendBtn');
+      btn.innerText = "⏳ 送信中...";
+      btn.disabled = true;
+      btn.style.background = "#9e9e9e";
+
+      fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify(dataToSend)
+      })
+      .then(response => response.json())
+      .then(result => {
+        if(result.status === "success") {
+          alert("✅ スプレッドシートに保存しました！");
+          filterArea();
+        } else {
+          alert("エラー: " + result.message);
+        }
+      })
+      .catch(error => alert("通信エラー: " + error))
+      .finally(() => {
+        btn.innerText = "📤 データを送信する";
+        btn.disabled = false;
+        btn.style.background = "#4CAF50";
+      });
+    }
+  </script>
+</body>
+</html>
