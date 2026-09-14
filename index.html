@@ -93,24 +93,41 @@
           speechResult += event.results[i][0].transcript;
         }
 
-        const numbers = speechResult.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).match(/\d+/g);
+        // 💡 改善点: 全角数字を半角にしつつ、「数字」だけでなく「空白」「なし」「パス」「いらない」という言葉もトークンとして切り出す
+        // 音声認識された文字列をスペース区切り等で分解、または順番にマッチさせる
+        // ここでは「数字」または「空白・なし・パス・いらない」の単語を順番に配列として抽出します
+        
+        // まず全角を半角に
+        const normalized = speechResult.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+        
+        // 数字の塊、または特定のスキップワード（空白、なし、パス、いらない）を順番に拾う正規表現
+        const regex = /(\d+|空白|なし|パス|いらない)/g;
+        const matches = normalized.match(regex);
 
-        if (numbers && numbers.length > 0) {
-          statusText.innerHTML = `🗣️ 音声:「${speechResult}」<br>✅ ${numbers.length}個の数字を抽出`;
-          numbers.slice(0, maxItems).forEach((num, i) => {
+        if (matches && matches.length > 0) {
+          statusText.innerHTML = `🗣️ 音声:「${speechResult}」<br>✅ ${matches.length}個の要素を抽出`;
+          
+          matches.slice(0, maxItems).forEach((val, i) => {
             const display = document.getElementById(`p-${index}-${i}`);
             if(display) { 
-              display.innerText = num; 
-              display.style.color = '#e91e63'; 
-              currentInputData[index].prices[i] = num;
+              // スキップワードの場合は空欄にする
+              if (["空白", "なし", "パス", "いらない"].includes(val)) {
+                display.innerText = "-";
+                display.style.color = '#333';
+                currentInputData[index].prices[i] = ""; // 空欄としてセット
+              } else {
+                display.innerText = val; 
+                display.style.color = '#e91e63'; 
+                currentInputData[index].prices[i] = val; // 数字をセット
+              }
             }
           });
 
-          if (numbers.length >= maxItems) {
+          if (matches.length >= maxItems) {
             recognition.stop();
           }
         } else {
-          statusText.innerHTML = `🗣️ 音声:「${speechResult}」<br>❌ 数字を認識できませんでした`;
+          statusText.innerHTML = `🗣️ 音声:「${speechResult}」<br>❌ 認識できませんでした`;
         }
       };
       recognition.onend = () => cardElement.classList.remove('recording');
